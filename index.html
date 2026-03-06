@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>老花眼视觉训练</title>
+    <style>
+        :root { --primary: #2c3e50; --accent: #3498db; --bg: #f4f7f6; }
+        body { font-family: -apple-system, sans-serif; margin: 0; background: var(--bg); color: #333; }
+        .page { display: none; min-height: 100vh; width: 100vw; flex-direction: column; align-items: center; padding: 20px; box-sizing: border-box; }
+        .active { display: flex; }
+
+        .card { background: white; padding: 18px; border-radius: 18px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); width: 100%; max-width: 420px; margin-bottom: 12px; }
+        h2 { margin: 0 0 15px 0; font-size: 1.1rem; color: var(--primary); text-align: center; }
+        
+        .input-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; background: #f8f9fa; padding: 10px; border-radius: 8px; }
+        label { font-size: 0.85rem; color: #555; font-weight: bold; }
+        input[type="number"] { width: 80px; padding: 8px; border: 1px solid #ccc; border-radius: 5px; text-align: center; font-size: 1rem; }
+        
+        .va-display { font-size: 0.85rem; color: var(--accent); margin-top: -5px; margin-bottom: 10px; font-weight: bold; padding-left: 10px; }
+
+        .preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 15px; }
+        .btn-preset { background: #eee; border: 1px solid #ddd; padding: 10px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; }
+        .btn-preset.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+        #display-box { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 350px; background: #fff; border-radius: 15px; margin: 15px 0; border: 1px solid #eee; }
+        #target { font-weight: bold; line-height: 1; color: #000; display: inline-block; font-family: "Courier New", monospace; }
+        
+        .btn-main { background: var(--primary); color: white; border: none; padding: 16px; border-radius: 12px; font-size: 1rem; font-weight: bold; width: 100%; cursor: pointer; }
+        #log-area { max-height: 100px; overflow-y: auto; font-size: 0.75rem; background: #f0f0f0; padding: 10px; border-radius: 8px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="page-settings" class="page active">
+    <div class="card">
+        <h2>参数设置</h2>
+        
+        <label>快速设置-视力定尺寸 </label>
+        <div class="preset-grid">
+            <button class="btn-preset" onclick="setPreset(0.6)">0.6</button>
+            <button class="btn-preset active" onclick="setPreset(0.8)">0.8</button>
+            <button class="btn-preset" onclick="setPreset(1.0)">1.0</button>
+            <button class="btn-preset" onclick="setPreset(1.2)">1.2</button>
+            <button class="btn-preset" onclick="setPreset(1.5)">1.5</button>
+            <button class="btn-preset" onclick="setPreset(2.0)">2.0</button>
+        </div>
+
+        <div class="input-row">
+            <label>近处 (40cm) 视标 mm</label>
+            <input type="number" id="near-mm" value="0.73" step="0.01" oninput="updateVAInfo()">
+        </div>
+        <div id="near-va-text" class="va-display">对应视力: 0.80</div>
+
+        <div class="input-row">
+            <label>远处 (5米) 视标 mm</label>
+            <input type="number" id="far-mm" value="9.10" step="0.01" oninput="updateVAInfo()">
+        </div>
+        <div id="far-va-text" class="va-display">对应视力: 0.80</div>
+
+        <div class="input-row">
+            <label>切换频率 (秒)</label>
+            <input type="number" id="duration" value="3" step="0.5">
+        </div>
+
+        <label>视标类型</label>
+        <select id="target-type" style="width:100%; padding:12px; margin-top:5px; border-radius:8px; font-size:1rem;">
+            <option value="hanzi">精选复杂汉字 (30个)</option>
+            <option value="numbers">随机数字 (30个)</option>
+            <option value="letters">英文字母 (26个)</option>
+            <option value="ec">E/C 视力符号</option>
+            <option value="mixed">全混合模式</option>
+        </select>
+        
+        <button class="btn-main" style="margin-top:20px;" onclick="start()">开启训练</button>
+    </div>
+
+    <div class="card">
+        <label>训练记录 (2026-03-06)</label>
+        <div id="log-area">暂无记录</div>
+    </div>
+</div>
+
+<div id="page-train" class="page" style="background:#fff; padding:0;">
+    <div id="timer" style="margin-top:40px; font-weight:bold; font-family:monospace; font-size:1.4rem;">00:00</div>
+    <div id="hint" style="font-size:1rem; margin-top:10px; font-weight:bold;">准备中...</div>
+    <div id="display-box">
+        <div id="target"></div>
+    </div>
+    <button class="btn-main" style="background:#e74c3c; width:90%; margin-bottom:30px;" onclick="location.reload()">停止训练并保存</button>
+</div>
+
+<script>
+    const data = {
+        hanzi: "曦巍攀瓣颤囊餐翻鹰耀藏辩瞬邃髓麒麟饕餮魑魅魍魉鳞甲骤降鞭策镶嵌朦胧憋屈螺旋颤抖",
+        numbers: "01234567891011121314151617181920212223242526272829",
+        letters: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        ec: "EEEECCCC",
+        symbols: "○△□◇★☆▽▲▣▤▥▦▧▨▩◎⊕⊗⊙"
+    };
+
+    let seconds = 0, timer = null, isNearMode = true;
+
+    function setPreset(va) {
+        document.querySelectorAll('.btn-preset').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+        
+        // 校准公式
+        // 40cm 1.0 = 0.58mm
+        // 5m 1.0 = 7.27mm
+        document.getElementById('near-mm').value = (0.58 / va).toFixed(2);
+        document.getElementById('far-mm').value = (7.27 / va).toFixed(2);
+        updateVAInfo();
+    }
+
+    function updateVAInfo() {
+        const nMM = parseFloat(document.getElementById('near-mm').value) || 0.1;
+        const fMM = parseFloat(document.getElementById('far-mm').value) || 0.1;
+        
+        // 计算公式修正
+        const nVA = (0.58 / nMM).toFixed(2);
+        const fVA = (7.27 / fMM).toFixed(2);
+        
+        document.getElementById('near-va-text').innerText = `对应 40cm 视力: ${nVA}`;
+        document.getElementById('far-va-text').innerText = `对应 5m 视力: ${fVA}`;
+    }
+
+    function start() {
+        document.getElementById('page-settings').style.display = 'none';
+        document.getElementById('page-train').style.display = 'flex';
+        const interval = parseFloat(document.getElementById('duration').value) * 1000;
+        
+        timer = setInterval(refresh, interval);
+        setInterval(() => {
+            seconds++;
+            const m = String(Math.floor(seconds/60)).padStart(2,'0');
+            const s = String(seconds%60).padStart(2,'0');
+            document.getElementById('timer').innerText = `${m}:${s}`;
+        }, 1000);
+        refresh();
+    }
+
+    function refresh() {
+        const type = document.getElementById('target-type').value;
+        const nSize = document.getElementById('near-mm').value;
+        const fSize = document.getElementById('far-mm').value;
+        const target = document.getElementById('target');
+        
+        let pool = (type === 'mixed') ? (data.hanzi + data.numbers + data.letters + data.ec) : data[type];
+        
+        target.innerText = pool[Math.floor(Math.random() * pool.length)];
+        // 物理毫米单位
+        target.style.fontSize = (isNearMode ? nSize : fSize) + "mm";
+        
+        const rots = [0, 90, 180, 270];
+        target.style.transform = `rotate(${rots[Math.floor(Math.random()*4)]}deg)`;
+        
+        const hint = document.getElementById('hint');
+        hint.innerText = isNearMode ? "【看近处】锁焦 40cm" : "【看远处】模拟望远 5m";
+        hint.style.color = isNearMode ? "#e74c3c" : "#3498db";
+        
+        isNearMode = !isNearMode;
+    }
+
+    window.onbeforeunload = () => {
+        if(seconds > 2) {
+            const date = "2026-03-06";
+            const log = `${date} | 训练:${seconds}s | 强度:${(0.58/document.getElementById('near-mm').value).toFixed(2)}`;
+            let logs = JSON.parse(localStorage.getItem('vision_v9_2_logs') || "[]");
+            logs.unshift(log);
+            localStorage.setItem('vision_v9_2_logs', JSON.stringify(logs.slice(0,10)));
+        }
+    };
+
+    window.onload = () => {
+        const logs = JSON.parse(localStorage.getItem('vision_v9_2_logs') || "[]");
+        document.getElementById('log-area').innerHTML = logs.map(l => `<div>${l}</div>`).join('') || "暂无记录";
+    };
+</script>
+</body>
+</html>
